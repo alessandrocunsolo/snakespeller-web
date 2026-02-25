@@ -1,13 +1,453 @@
-<!doctype html>
-<html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>My Google AI Studio App</title>
-  </head>
-  <body>
-    <div id="root"></div>
-    <script type="module" src="src/main.tsx"></script>
-  </body>
-</html>
+<!DOCTYPE html>
+<html lang="it">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Snake Speller</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body { 
+            background-color: #020617; 
+            color: white; 
+            font-family: ui-sans-serif, system-ui, sans-serif; 
+            margin: 0; 
+            display: flex; 
+            flex-direction: column; 
+            align-items: center; 
+            justify-content: center; 
+            min-height: 100vh; 
+            overflow: hidden; 
+            user-select: none;
+        }
+        #game-container { 
+            position: relative; 
+            width: 100%; 
+            max-width: 500px; 
+            aspect-ratio: 1/1; 
+            background-color: #0f172a; 
+            border: 4px solid #1e293b; 
+            border-radius: 0.75rem; 
+            box-shadow: 0 25px 50px -12px rgba(6, 78, 59, 0.25); 
+            overflow: hidden; 
+        }
+        .grid-bg { 
+            position: absolute; 
+            inset: 0; 
+            opacity: 0.1; 
+            pointer-events: none; 
+            background-image: linear-gradient(to right, #ffffff 1px, transparent 1px), linear-gradient(to bottom, #ffffff 1px, transparent 1px); 
+            background-size: 5% 5%; 
+        }
+        .snake-segment { 
+            position: absolute; 
+            background-color: rgba(16, 185, 129, 0.8); 
+            border-radius: 2px; 
+            width: 5%; 
+            height: 5%; 
+            transform: scale(0.85); 
+            transition: left 0.1s linear, top 0.1s linear; 
+            z-index: 10; 
+        }
+        .snake-head { 
+            background-color: #34d399; 
+            transform: scale(1.05); 
+            z-index: 20; 
+        }
+        .food { 
+            position: absolute; 
+            background-color: #f43f5e; 
+            border-radius: 50%; 
+            width: 5%; 
+            height: 5%; 
+            display: flex; 
+            align-items: center; 
+            justify-content: center; 
+            font-weight: bold; 
+            font-size: clamp(10px, 3vw, 14px); 
+            box-shadow: 0 0 10px rgba(244, 63, 94, 0.6); 
+            z-index: 10; 
+            color: white; 
+        }
+        .overlay { 
+            position: absolute; 
+            inset: 0; 
+            display: flex; 
+            flex-direction: column; 
+            align-items: center; 
+            justify-content: center; 
+            z-index: 30; 
+            border-radius: 0.5rem; 
+            text-align: center; 
+            padding: 1rem; 
+        }
+        .overlay-bg { 
+            background-color: rgba(2, 6, 23, 0.8); 
+            backdrop-filter: blur(4px); 
+        }
+        .hidden { display: none !important; }
+        .word-container { 
+            display: flex; 
+            gap: 0.5rem; 
+            font-size: clamp(1.5rem, 5vw, 2.5rem); 
+            font-weight: 900; 
+            letter-spacing: 0.1em; 
+            margin-bottom: 1.5rem; 
+            height: 3rem; 
+            align-items: center; 
+        }
+        .letter { 
+            color: #334155; 
+            transition: all 0.3s; 
+            display: inline-block;
+        }
+        .letter.correct { color: #34d399; }
+        .letter.current { 
+            color: #fb7185; 
+            transform: scale(1.25) translateY(-4px); 
+        }
+        .btn { 
+            display: flex; 
+            align-items: center; 
+            gap: 0.5rem; 
+            background-color: #10b981; 
+            color: #020617; 
+            padding: 1rem 2rem; 
+            border-radius: 9999px; 
+            font-weight: 900; 
+            font-size: 1.125rem; 
+            cursor: pointer; 
+            border: none; 
+            transition: transform 0.1s; 
+            box-shadow: 0 0 20px rgba(16, 185, 129, 0.4); 
+        }
+        .btn:hover { background-color: #34d399; transform: scale(1.05); }
+        .btn:active { transform: scale(0.95); }
+        .controls { 
+            display: grid; 
+            grid-template-columns: repeat(3, 1fr); 
+            gap: 0.5rem; 
+            margin-top: 2rem; 
+            width: 12rem; 
+        }
+        .ctrl-btn { 
+            background-color: #1e293b; 
+            border: 1px solid #334155; 
+            border-radius: 0.75rem; 
+            padding: 1rem; 
+            display: flex; 
+            justify-content: center; 
+            align-items: center; 
+            color: #34d399; 
+            cursor: pointer; 
+        }
+        .ctrl-btn:active { background-color: #334155; transform: scale(0.95); }
+        @media (min-width: 640px) { .controls { display: none; } }
+    </style>
+</head>
+<body>
+    <div class="word-container" id="word-display"></div>
+    
+    <div style="display: flex; justify-content: space-between; width: 100%; max-width: 500px; margin-bottom: 1rem; padding: 0 0.5rem; font-family: monospace; color: #cbd5e1;">
+        <div style="display: flex; flex-direction: column;">
+            <span style="font-size: 0.75rem; color: #64748b; text-transform: uppercase; font-weight: bold;">Punteggio</span>
+            <span style="font-size: 1.5rem; font-weight: bold; color: white;" id="score-display">0</span>
+        </div>
+        <button id="pause-btn" style="background: none; border: none; color: #94a3b8; cursor: pointer; padding: 0.5rem;">
+            <svg id="pause-icon" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="4" width="4" height="16"></rect><rect x="14" y="4" width="4" height="16"></rect></svg>
+            <svg id="play-icon" class="hidden" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>
+        </button>
+        <div style="display: flex; flex-direction: column; align-items: flex-end;">
+            <span style="font-size: 0.75rem; color: #64748b; text-transform: uppercase; font-weight: bold;">Record</span>
+            <span style="font-size: 1.5rem; font-weight: bold; color: #fbbf24;" id="highscore-display">0</span>
+        </div>
+    </div>
 
+    <div id="game-container">
+        <div class="grid-bg"></div>
+        <div id="entities"></div>
+        
+        <div id="start-screen" class="overlay overlay-bg">
+            <h2 style="font-size: 2.5rem; font-weight: 900; color: #34d399; margin-bottom: 1rem;">SNAKE SPELLER</h2>
+            <p style="color: #cbd5e1; margin-bottom: 2rem; font-size: 1rem; padding: 0 1rem;">Mangia le lettere nell'ordine corretto per formare la parola in alto. Se sbagli lettera, hai perso!</p>
+            <button class="btn" id="start-btn">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>
+                GIOCA ORA
+            </button>
+        </div>
+
+        <div id="game-over-screen" class="overlay overlay-bg hidden" style="border: 4px solid rgba(244, 63, 94, 0.5);">
+            <h2 style="font-size: 3rem; font-weight: 900; color: #f43f5e; margin-bottom: 0.5rem;">GAME OVER</h2>
+            <p style="color: #cbd5e1; margin-bottom: 2rem; font-size: 1.125rem;">Punteggio finale: <span style="color: #34d399; font-weight: bold; font-size: 1.5rem;" id="final-score">0</span></p>
+            <button class="btn" id="restart-btn">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"></path><path d="M3 3v5h5"></path></svg>
+                RIPROVA
+            </button>
+        </div>
+
+        <div id="pause-screen" class="overlay overlay-bg hidden">
+            <h2 style="font-size: 2.5rem; font-weight: 900; color: white; margin-bottom: 1rem; letter-spacing: 0.1em;">PAUSA</h2>
+            <button class="btn" id="resume-btn" style="background-color: rgba(255,255,255,0.1); color: white; box-shadow: none;">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>
+                Riprendi
+            </button>
+        </div>
+    </div>
+
+    <div class="controls">
+        <div></div>
+        <div class="ctrl-btn" id="btn-up"><svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="18 15 12 9 6 15"></polyline></svg></div>
+        <div></div>
+        <div class="ctrl-btn" id="btn-left"><svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"></polyline></svg></div>
+        <div class="ctrl-btn" id="btn-down"><svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg></div>
+        <div class="ctrl-btn" id="btn-right"><svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg></div>
+    </div>
+
+    <script>
+        const GRID_SIZE = 20;
+        const INITIAL_SNAKE = [{ x: 10, y: 10 }, { x: 10, y: 11 }, { x: 10, y: 12 }];
+        const INITIAL_DIRECTION = { x: 0, y: -1 };
+        const BASE_SPEED = 150;
+        const WORDS = ["SERPENTE", "MELA", "GIOCO", "COMPUTER", "PROGRAMMA", "TASTIERA", "PYTHON", "REACT", "JAVASCRIPT", "CODICE", "INFORMATICA", "SVILUPPO", "WEB", "INTERNET", "SCHERMO", "ALGORITMO", "VARIABILE", "FUNZIONE", "SISTEMA", "RETE"];
+
+        let snake = [...INITIAL_SNAKE];
+        let direction = { ...INITIAL_DIRECTION };
+        let directionQueue = [];
+        let word = WORDS[0];
+        let wordIndex = 0;
+        let foods = [];
+        let score = 0;
+        let highScore = localStorage.getItem('snakeSpellerHighScore') ? parseInt(localStorage.getItem('snakeSpellerHighScore')) : 0;
+        let hasStarted = false;
+        let gameOver = false;
+        let isPaused = false;
+        let speed = BASE_SPEED;
+        let gameLoopId = null;
+
+        const entitiesDiv = document.getElementById('entities');
+        const wordDisplay = document.getElementById('word-display');
+        const scoreDisplay = document.getElementById('score-display');
+        const highscoreDisplay = document.getElementById('highscore-display');
+        const finalScoreDisplay = document.getElementById('final-score');
+        
+        const startScreen = document.getElementById('start-screen');
+        const gameOverScreen = document.getElementById('game-over-screen');
+        const pauseScreen = document.getElementById('pause-screen');
+        
+        const pauseBtn = document.getElementById('pause-btn');
+        const pauseIcon = document.getElementById('pause-icon');
+        const playIcon = document.getElementById('play-icon');
+
+        highscoreDisplay.innerText = highScore;
+
+        function generateFoodsForWord(w, currentSnake) {
+            const newFoods = [];
+            const occupied = [...currentSnake];
+            for (let i = 0; i < w.length; i++) {
+                let newPos;
+                while (true) {
+                    newPos = { x: Math.floor(Math.random() * GRID_SIZE), y: Math.floor(Math.random() * GRID_SIZE) };
+                    if (!occupied.some(pos => pos.x === newPos.x && pos.y === newPos.y)) break;
+                }
+                newFoods.push({ id: `${i}-${newPos.x}-${newPos.y}`, x: newPos.x, y: newPos.y, letter: w[i] });
+                occupied.push(newPos);
+            }
+            return newFoods;
+        }
+
+        function renderWord() {
+            wordDisplay.innerHTML = '';
+            for (let i = 0; i < word.length; i++) {
+                const span = document.createElement('span');
+                span.innerText = word[i];
+                span.className = 'letter';
+                if (i < wordIndex) span.classList.add('correct');
+                else if (i === wordIndex) span.classList.add('current');
+                wordDisplay.appendChild(span);
+            }
+        }
+
+        function renderEntities() {
+            entitiesDiv.innerHTML = '';
+            
+            // Render foods
+            foods.forEach(f => {
+                const div = document.createElement('div');
+                div.className = 'food';
+                div.style.left = `${(f.x / GRID_SIZE) * 100}%`;
+                div.style.top = `${(f.y / GRID_SIZE) * 100}%`;
+                div.innerText = f.letter;
+                entitiesDiv.appendChild(div);
+            });
+
+            // Render snake
+            snake.forEach((segment, idx) => {
+                const div = document.createElement('div');
+                div.className = `snake-segment ${idx === 0 ? 'snake-head' : ''}`;
+                div.style.left = `${(segment.x / GRID_SIZE) * 100}%`;
+                div.style.top = `${(segment.y / GRID_SIZE) * 100}%`;
+                entitiesDiv.appendChild(div);
+            });
+        }
+
+        function updateScore(newScore) {
+            score = newScore;
+            scoreDisplay.innerText = score;
+            if (score > highScore) {
+                highScore = score;
+                highscoreDisplay.innerText = highScore;
+                localStorage.setItem('snakeSpellerHighScore', highScore);
+            }
+        }
+
+        function setGameOverState() {
+            gameOver = true;
+            clearInterval(gameLoopId);
+            finalScoreDisplay.innerText = score;
+            gameOverScreen.classList.remove('hidden');
+        }
+
+        function gameLoop() {
+            if (!hasStarted || gameOver || isPaused) return;
+
+            if (directionQueue.length > 0) {
+                direction = directionQueue.shift();
+            }
+
+            const head = snake[0];
+            const newHead = { x: head.x + direction.x, y: head.y + direction.y };
+
+            // Wall collision
+            if (newHead.x < 0 || newHead.x >= GRID_SIZE || newHead.y < 0 || newHead.y >= GRID_SIZE) {
+                return setGameOverState();
+            }
+
+            // Self collision
+            if (snake.some(segment => segment.x === newHead.x && segment.y === newHead.y)) {
+                return setGameOverState();
+            }
+
+            const newSnake = [newHead, ...snake];
+
+            // Food collision
+            const eatenFoodIndex = foods.findIndex(f => f.x === newHead.x && f.y === newHead.y);
+            if (eatenFoodIndex !== -1) {
+                const eatenFood = foods[eatenFoodIndex];
+                if (eatenFood.letter === word[wordIndex]) {
+                    updateScore(score + 10);
+                    foods.splice(eatenFoodIndex, 1);
+                    
+                    const nextIndex = wordIndex + 1;
+                    if (nextIndex >= word.length) {
+                        updateScore(score + 50);
+                        word = WORDS[Math.floor(Math.random() * WORDS.length)];
+                        wordIndex = 0;
+                        foods = generateFoodsForWord(word, newSnake);
+                        speed = Math.max(60, speed - 5);
+                        clearInterval(gameLoopId);
+                        gameLoopId = setInterval(gameLoop, speed);
+                    } else {
+                        wordIndex = nextIndex;
+                    }
+                    renderWord();
+                } else {
+                    return setGameOverState();
+                }
+            } else {
+                newSnake.pop();
+            }
+
+            snake = newSnake;
+            renderEntities();
+        }
+
+        function startGame() {
+            hasStarted = true;
+            startScreen.classList.add('hidden');
+            word = WORDS[Math.floor(Math.random() * WORDS.length)];
+            wordIndex = 0;
+            foods = generateFoodsForWord(word, snake);
+            renderWord();
+            renderEntities();
+            gameLoopId = setInterval(gameLoop, speed);
+        }
+
+        function resetGame() {
+            snake = [...INITIAL_SNAKE];
+            direction = { ...INITIAL_DIRECTION };
+            directionQueue = [];
+            score = 0;
+            updateScore(0);
+            speed = BASE_SPEED;
+            gameOver = false;
+            isPaused = false;
+            gameOverScreen.classList.add('hidden');
+            
+            word = WORDS[Math.floor(Math.random() * WORDS.length)];
+            wordIndex = 0;
+            foods = generateFoodsForWord(word, snake);
+            
+            renderWord();
+            renderEntities();
+            
+            clearInterval(gameLoopId);
+            gameLoopId = setInterval(gameLoop, speed);
+        }
+
+        function togglePause() {
+            if (!hasStarted || gameOver) return;
+            isPaused = !isPaused;
+            if (isPaused) {
+                pauseScreen.classList.remove('hidden');
+                pauseIcon.classList.add('hidden');
+                playIcon.classList.remove('hidden');
+            } else {
+                pauseScreen.classList.add('hidden');
+                pauseIcon.classList.remove('hidden');
+                playIcon.classList.add('hidden');
+            }
+        }
+
+        document.getElementById('start-btn').addEventListener('click', startGame);
+        document.getElementById('restart-btn').addEventListener('click', resetGame);
+        document.getElementById('resume-btn').addEventListener('click', togglePause);
+        pauseBtn.addEventListener('click', togglePause);
+
+        window.addEventListener('keydown', (e) => {
+            if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', ' '].includes(e.key)) e.preventDefault();
+            if (!hasStarted || gameOver) return;
+
+            const lastDir = directionQueue.length > 0 ? directionQueue[directionQueue.length - 1] : direction;
+            let newDir = null;
+
+            switch (e.key) {
+                case 'ArrowUp': case 'w': case 'W': if (lastDir.y !== 1) newDir = { x: 0, y: -1 }; break;
+                case 'ArrowDown': case 's': case 'S': if (lastDir.y !== -1) newDir = { x: 0, y: 1 }; break;
+                case 'ArrowLeft': case 'a': case 'A': if (lastDir.x !== 1) newDir = { x: -1, y: 0 }; break;
+                case 'ArrowRight': case 'd': case 'D': if (lastDir.x !== -1) newDir = { x: 1, y: 0 }; break;
+                case ' ': case 'Escape': togglePause(); return;
+            }
+
+            if (newDir && (lastDir.x !== newDir.x || lastDir.y !== newDir.y)) {
+                directionQueue.push(newDir);
+            }
+        });
+
+        function handleDirClick(x, y) {
+            if (!hasStarted || gameOver || isPaused) return;
+            const lastDir = directionQueue.length > 0 ? directionQueue[directionQueue.length - 1] : direction;
+            if (lastDir.x !== 0 && x === -lastDir.x) return;
+            if (lastDir.y !== 0 && y === -lastDir.y) return;
+            if (lastDir.x !== x || lastDir.y !== y) directionQueue.push({ x, y });
+        }
+
+        document.getElementById('btn-up').addEventListener('click', () => handleDirClick(0, -1));
+        document.getElementById('btn-down').addEventListener('click', () => handleDirClick(0, 1));
+        document.getElementById('btn-left').addEventListener('click', () => handleDirClick(-1, 0));
+        document.getElementById('btn-right').addEventListener('click', () => handleDirClick(1, 0));
+
+        // Initial render
+        renderWord();
+        renderEntities();
+    </script>
+</body>
+</html>
